@@ -56,5 +56,26 @@ pipeline {
                 '''
             }
         }
+        stage('Deploy to Application EC2') {
+            steps {
+                echo '===== DEPLOYING TO APPLICATION EC2 ====='
+
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'cicd-app-server-ssh',
+                    keyFileVariable: 'SSH_KEY',
+                    usernameVariable: 'SSH_USER'
+                )]) {
+                    sh '''
+                        AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+                        ECR_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${BUILD_NUMBER}"
+
+                        ssh -o StrictHostKeyChecking=no \
+                            -i "$SSH_KEY" \
+                            "$SSH_USER@172.31.42.232" \
+                            "echo Jenkins successfully connected to Application EC2"
+                    '''
+                }
+            }
+        }
     }
 }
