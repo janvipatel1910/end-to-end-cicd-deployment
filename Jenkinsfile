@@ -4,6 +4,7 @@ pipeline {
     environment {
         AWS_REGION = 'eu-north-1'
         ECR_REPOSITORY = 'end-to-end-cicd-app'
+        APP_SERVER = '172.31.42.232'
     }
 
     stages {
@@ -56,6 +57,7 @@ pipeline {
                 '''
             }
         }
+
         stage('Deploy to Application EC2') {
             steps {
                 echo '===== DEPLOYING TO APPLICATION EC2 ====='
@@ -67,12 +69,39 @@ pipeline {
                 )]) {
                     sh '''
                         AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-                        ECR_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${BUILD_NUMBER}"
+                        ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                        ECR_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}:${BUILD_NUMBER}"
 
                         ssh -o StrictHostKeyChecking=no \
                             -i "$SSH_KEY" \
-                            "$SSH_USER@172.31.42.232" \
-                            "echo Jenkins successfully connected to Application EC2"
+                            "$SSH_USER@$APP_SERVER" \
+                            "AWS_REGION='$AWS_REGION' ECR_REGISTRY='$ECR_REGISTRY' ECR_IMAGE='$ECR_IMAGE' bash -s" <<'REMOTE'
+
+set -e
+
+echo "===== LOGGING IN TO AMAZON ECR ====="
+aws ecr get-login-password --region "$AWS_REGION" | \
+    sudo docker login \
+    --username AWS \
+    --password-stdin "$ECR_REGISTRY"
+
+echo "===== PULLING NEW IMAGE ====="
+sudo docker pull "$ECR_IMAGE"
+
+echo "===== REPLACING APPLICATION CONTAINER ====="
+sudo docker rm -f cicd-app 2>/dev/null || true
+
+sudo docker run -d \
+    --name cicd-app \
+    --restart unless-stopped \
+    -p 80:5000 \
+    "$ECR_IMAGE"
+
+echo "===== CHECKING APPLICATION HEALTH ====="
+sleep 5
+curl --fail --silent --show-error http://localhost/health
+
+REMOTE
                     '''
                 }
             }
