@@ -57,7 +57,28 @@ pipeline {
                 '''
             }
         }
+stage('Validate SSH Credential') {
+    steps {
+        echo '===== VALIDATING JENKINS SSH CREDENTIAL ====='
 
+        withCredentials([sshUserPrivateKey(
+            credentialsId: 'cicd-app-server-ssh',
+            keyFileVariable: 'SSH_KEY',
+            usernameVariable: 'SSH_USER'
+        )]) {
+            sh '''
+                echo "Credential username: $SSH_USER"
+                echo "Key file permissions:"
+                ls -l "$SSH_KEY"
+
+                echo "Testing whether OpenSSH can parse the private key..."
+                ssh-keygen -y -f "$SSH_KEY" > /dev/null
+
+                echo "SSH private key parsed successfully."
+            '''
+        }
+    }
+}
         stage('Deploy to Application EC2') {
             steps {
                 echo '===== DEPLOYING TO APPLICATION EC2 ====='
