@@ -125,7 +125,7 @@ sudo docker rm -f cicd-app 2>/dev/null || true
 sudo docker run -d \
     --name cicd-app \
     --restart unless-stopped \
-    -p 80:5001 \
+    -p 80:5000 \
     "$ECR_IMAGE"
 
 echo "===== CHECKING APPLICATION HEALTH ====="
