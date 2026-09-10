@@ -99,6 +99,16 @@ stage('Validate SSH Credential') {
                             "AWS_REGION='$AWS_REGION' ECR_REGISTRY='$ECR_REGISTRY' ECR_IMAGE='$ECR_IMAGE' bash -s" <<'REMOTE'
 
 set -e
+echo "===== SAVING CURRENT WORKING IMAGE ====="
+PREVIOUS_IMAGE=$(sudo docker inspect \
+    --format='{{.Config.Image}}' \
+    cicd-app 2>/dev/null || true)
+
+if [ -n "$PREVIOUS_IMAGE" ]; then
+    echo "Previous working image found."
+else
+    echo "No previous application image found."
+fi
 
 echo "===== LOGGING IN TO AMAZON ECR ====="
 aws ecr get-login-password --region "$AWS_REGION" | \
@@ -120,8 +130,43 @@ sudo docker run -d \
 
 echo "===== CHECKING APPLICATION HEALTH ====="
 sleep 5
-curl --fail --silent --show-error http://localhost/health
 
+if curl --fail --silent --show-error http://localhost/health; then
+    echo ""
+    echo "===== DEPLOYMENT SUCCESSFUL ====="
+    echo "New application is healthy."
+else
+    echo ""
+    echo "===== HEALTH CHECK FAILED ====="
+    echo "New deployment is unhealthy."
+
+    if [ -n "$PREVIOUS_IMAGE" ]; then
+        echo "===== ROLLING BACK ====="
+
+        sudo docker rm -f cicd-app 2>/dev/null || true
+
+        sudo docker run -d \
+            --name cicd-app \
+            --restart unless-stopped \
+            -p 80:5000 \
+            "$PREVIOUS_IMAGE"
+
+        sleep 5
+
+        if curl --fail --silent --show-error http://localhost/health; then
+            echo ""
+            echo "===== ROLLBACK SUCCESSFUL ====="
+            echo "Previous working application restored."
+        else
+            echo ""
+            echo "===== ROLLBACK FAILED ====="
+        fi
+    else
+        echo "No previous image available for rollback."
+    fi
+
+    exit 1
+fi
 REMOTE
                     '''
                 }

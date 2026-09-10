@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 .DS_Store
 Jenkinsfile.backup
+
+Jenkinsfile.old
+Jenkinsfile.build7-working
